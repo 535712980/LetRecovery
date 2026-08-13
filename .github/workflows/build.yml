@@ -1,6 +1,6 @@
-name: Build LaoWu Installer
+name: Build OldWu PE
 
-on: [workflow_dispatch]
+on: [workflow_dispatch] 
 
 jobs:
   build_windows:
@@ -9,19 +9,27 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
-      - name: Setup Rust Toolchain
-        uses: dtolnay/rust-toolchain@stable
         
-      - name: Build Release
+      - name: List root folders (Debug)
         run: |
-          # 👇 这里是关键：显式告诉电脑文件夹名叫 "PE 端"（带空格）
-          cd "PE 端"
+          echo "--- 根目录文件夹清单 ---"
+          Get-ChildItem -Directory | Select-Object Name
+          
+      - name: Setup Rust & Build
+        shell: pwsh
+        run: |
+          # 🔍 自动找出根目录下带有 Cargo.toml 的那个文件夹
+          $projFolder = (Get-ChildItem -Directory | Where-Object { Test-Path "$($_.Name)\Cargo.toml" }).Name
+          Write-Host "===> 找到编译目标目录: $projFolder <==="
+          
+          # ⚙️ 进入目录并编译
+          Set-Location $projFolder
+          rustup default stable
           cargo build --release
           
-      - name: Upload Installer
+      - name: Upload EXE
         uses: actions/upload-artifact@v4
         with:
-          name: LaoWu-Installer
-          # 👇 上传的路径也要改成准确的文件夹名
-          path: "./PE 端/target/release/LetRecoveryPE.exe"
+          name: OldWuPE_Installer
+          # 📦 模糊匹配路径，只要编译成功就会打包上传
+          path: '**/target/release/LetRecoveryPE.exe'
