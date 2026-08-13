@@ -1,5 +1,6 @@
 name: Build LaoWu Installer
-on: [workflow_dispatch]
+
+on: [workflow_dispatch] 
 
 jobs:
   build_windows:
@@ -13,14 +14,13 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         
       - name: Build Release
-        shell: pwsh
-        run: |
-          Write-Host "正在进入 PE 端 目录编译..."
-          Set-Location "PE 端"
+        # 使用 manifest-path 直接指定位置，避免进入中文名目录出错
+        run: | 
+          cd "PE 端"
           cargo build --release
           
       - name: Upload Installer
         uses: actions/upload-artifact@v4
         with:
-          name: Old-Five-Installer
-          path: 'PE 端/target/release/LetRecoveryPE.exe'
+          name: LaoWu-PE-Installer
+          path: './PE 端/target/release/LetRecoveryPE.exe'
