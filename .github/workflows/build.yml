@@ -1,25 +1,24 @@
 name: Build LaoWu Installer
-
 on: [workflow_dispatch]
 
 jobs:
   build_windows:
     runs-on: windows-latest
-    defaults:
-      run:
-        # 👇 指定所有命令只在 "PE 端" 文件夹下运行
-        working-directory: 'PE 端'
-        
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
       
-      - name: Set up Rust toolchain
+      - name: Setup Rust Toolchain
         uses: dtolnay/rust-toolchain@stable
         
       - name: Build Release
-        run: cargo build --release
-
+        shell: pwsh
+        run: |
+          Write-Host "正在进入 PE 端 目录编译..."
+          Set-Location "PE 端"
+          cargo build --release
+          
       - name: Upload Installer
         uses: actions/upload-artifact@v4
         with:
