@@ -18,18 +18,28 @@ jobs:
       - name: Setup Rust & Build
         shell: pwsh
         run: |
-          # 🔍 自动找出根目录下带有 Cargo.toml 的那个文件夹
-          $projFolder = (Get-ChildItem -Directory | Where-Object { Test-Path "$($_.Name)\Cargo.toml" }).Name
-          Write-Host "===> 找到编译目标目录: $projFolder <==="
+          # 1. 找出所有带 Cargo.toml 的项目文件夹
+          $projects = Get-ChildItem -Directory | Where-Object { Test-Path "$($_.Name)\Cargo.toml" }
+          Write-Host "===> 发现候选文件夹: $($projects.Name) <==="
+
+          # 2. 【关键修改】筛选逻辑：必须是 PE 相关，排除掉 "正常系统端"
+          $targetProject = $projects | Where-Object { 
+              $_.Name -match "PE" -and $_.Name -notmatch "正常" 
+          }
+
+          if ($targetProject.Count -ne 1) {
+             throw "未找到唯一的 PE 项目文件夹（找到了 $($targetProject.Count) 个）！请确认文件夹名字是否包含 'PE'"
+          }
           
-          # ⚙️ 进入目录并编译
-          Set-Location $projFolder
-          rustup default stable
+          Write-Host "===> 锁定目标并进入: $($targetProject.Name) <==="
+          Set-Location $targetProject.FullName
+
+          # 3. 开始编译
           cargo build --release
           
-      - name: Upload EXE
+      - name: Upload Installer
         uses: actions/upload-artifact@v4
         with:
-          name: OldWuPE_Installer
-          # 📦 模糊匹配路径，只要编译成功就会打包上传
+          name: LaoWu-PE-Installer
+          # 自动在深层目录下寻找生成的文件
           path: '**/target/release/LetRecoveryPE.exe'
