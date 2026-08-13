@@ -53,24 +53,22 @@ impl LaoWuApp {
         if v.len() > 100 { v.remove(0); }
     }
 
-    // 【重要修改】Slot-line 接受的是 &mut self，这比 &self 要安全
-    fn start_install(&self) {
+    // 【重点：现在这里要改成 &mut self】
+    fn start_install(&mut self) {
         let path = self.sys_path.clone();
         let drive = self.target_drive.clone();
         let logs = Arc::clone(&self.logs);
-
+        
         self.running = true;
         self.add_log(">>> 正在启动系统安装流程...");
 
         thread::spawn(move || {
-            // 检查文件存在性
             if !std::path::Path::new(&path).exists() {
                 logs.lock().unwrap().push("❌ 错误: 找不到镜像文件！".into());
                 return;
             }
             logs.lock().unwrap().push(format!(">>> 镜像已锁定: {}", path));
 
-            // 格式化
             logs.lock().unwrap().push(format!(">>> 正在格式化 {} 盘...", drive));
             if let Err(e) = core::disk::DiskManager::format_partition(&drive) {
                 logs.lock().unwrap().push(format!("❌ 格式化失败: {}", e));
@@ -78,7 +76,6 @@ impl LaoWuApp {
             }
             logs.lock().unwrap().push("✅ 格式化完成".into());
 
-            // 释放镜像
             logs.lock().unwrap().push(">>> 正在释放系统镜像...".into());
             let success = if path.ends_with(".gho") {
                 let ghost = core::ghost::Ghost::new();
@@ -100,7 +97,6 @@ impl LaoWuApp {
             }
             logs.lock().unwrap().push("✅ 系统镜像释放完成".into());
 
-            // 引导修复
             logs.lock().unwrap().push(">>> 正在修复引导配置...".into());
             let boot = core::bcdedit::BootManager::new();
             let uefi = core::disk::DiskManager::detect_uefi_mode();
@@ -151,8 +147,8 @@ impl eframe::App for LaoWuApp {
                     if self.sys_path.is_empty() {
                         self.add_log("⚠️ 请先选择系统镜像文件！");
                     } else {
-                        // 【修正】打个包装！确保是 &mut self，安全调用
-                        self.start_install();
+                        // 【重点：现在这里要改成 &mut self】
+                        self.start_install(&mut self);
                     }
                 }
             });
