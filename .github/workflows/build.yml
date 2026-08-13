@@ -21,7 +21,7 @@ jobs:
           # 1. 找出所有带 Cargo.toml 的项目文件夹
           $projects = Get-ChildItem -Directory | Where-Object { Test-Path "$($_.Name)\Cargo.toml" }
           Write-Host "===> 发现候选文件夹: $($projects.Name) <==="
-
+          
           # 2. 【关键修改】筛选逻辑：必须是 PE 相关，排除掉 "正常系统端"
           $targetProject = $projects | Where-Object { 
               $_.Name -match "PE" -and $_.Name -notmatch "正常" 
@@ -32,7 +32,8 @@ jobs:
           }
           
           Write-Host "===> 锁定目标并进入: $($targetProject.Name) <==="
-          Set-Location $targetProject.FullName
+          # ✅ 更安全的 “目录切换” 合法写法
+          cd $targetProject.FullName
 
           # 3. 开始编译
           cargo build --release
