@@ -1,26 +1,31 @@
 name: Build LaoWu Installer
 
-on: [workflow_dispatch] 
+on: [workflow_dispatch]
 
 jobs:
   build_windows:
     runs-on: windows-latest
     
+    # ✅ 核心修改：指定工作目录，让系统自动进去编译，不再手动跳转
+    # ⚠️ 关键：如果你的文件夹名字叫 "PE"，就保持下面这样；如果叫 "PE端"，请把 "PE" 改成 "PE端"
+    defaults:
+      run:
+        working-directory: 'PE'
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        # ✅ 升级：用了最新版的 checkout，彻底消除 Node.js 警告
+        uses: actions/checkout@v4
       
-      - name: Setup Rust Toolchain
+      - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         
       - name: Build Release
-        # 使用 manifest-path 直接指定位置，避免进入中文名目录出错
-        run: | 
-          cd "PE 端"
-          cargo build --release
+        run: cargo build --release
           
       - name: Upload Installer
         uses: actions/upload-artifact@v4
         with:
-          name: LaoWu-PE-Installer
-          path: './PE 端/target/release/LetRecoveryPE.exe'
+          name: LaoWu-Installer
+          # ✅ 对应的下载路径也要保持一致（这里默认按 PE 写的）
+          path: 'PE/target/release/LetRecoveryPE.exe'
