@@ -53,7 +53,6 @@ impl LaoWuApp {
         if v.len() > 100 { v.remove(0); }
     }
 
-    // 【重点：现在这里要改成 &mut self】
     fn start_install(&mut self) {
         let path = self.sys_path.clone();
         let drive = self.target_drive.clone();
@@ -147,8 +146,7 @@ impl eframe::App for LaoWuApp {
                     if self.sys_path.is_empty() {
                         self.add_log("⚠️ 请先选择系统镜像文件！");
                     } else {
-                        // 【重点：现在这里要改成 &mut self】
-                        self.start_install(&mut self);
+                        self.start_install(); // 真正调用
                     }
                 }
             });
