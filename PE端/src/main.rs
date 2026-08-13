@@ -135,14 +135,17 @@ impl eframe::App for LaoWuApp {
 
             ui.add_space(20.0);
             
-            // 修复 Button 构建方式
+            // ✅ 修复按钮逻辑
             let btn_text = if self.running { "🔄 正在执行中..." } else { "🚀 立即一键重装" };
             let btn_color = if self.running { egui::Color32::GRAY } else { egui::Color32::GREEN };
-            
+
             ui.centered_and_justified(|ui| {
-                let mut btn = egui::Button::new(btn_text);
-                btn.fill = btn_color;
-                if ui.add_sized(ui.available_size_before_wrap(), btn).clicked() && !self.running {
+                // 更安全地设置按钮颜色（注释掉 akst 144 行的错误写法）
+                if ui.add_sized(
+                    ui.available_size_before_wrap(), 
+                    egui::Button::new(btn_text).fill(btn_color)
+                ).clicked() && !self.running {
+                    
                     if self.sys_path.is_empty() {
                         self.add_log("⚠️ 请先选择系统镜像文件！");
                     } else {
