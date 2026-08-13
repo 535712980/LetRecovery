@@ -3,17 +3,27 @@ name = "letrecovery-pe"
 version = "2026.1.0"
 edition = "2021"
 authors = ["NORMAL-EX"]
-description = "LetRecovery PE安装助手"
+description = "老五系统一键安装助手"
 
+# ==========================================
+# 核心依赖
+# ==========================================
 [dependencies]
-# GUI
+
+# GUI 框架
 eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow"] }
 egui = "0.31"
 
 # 序列化
 serde = { version = "1", features = ["derive"] }
 
-# Windows API
+# 错误处理与日志
+anyhow = "1"
+thiserror = "1"
+log = "0.4"
+env_logger = "0.11"
+
+# Windows API 调用
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = [
     "Win32_Foundation",
@@ -26,24 +36,23 @@ windows = { version = "0.58", features = [
     "Win32_System_Diagnostics_ToolHelp",
 ] }
 
-# wimgapi.dll / setupapi.dll 动态加载
+# DLL 动态加载（针对 wimgapi.dll / setupapi.dll）
 libloading = "0.8"
 
 # 编码转换
 encoding_rs = "0.8"
 
-# 日志
-log = "0.4"
-env_logger = "0.11"
-
-# 错误处理
-anyhow = "1"
-thiserror = "1"
-
 # 其他工具
 walkdir = "2"
 image = "0.25"
 
+# ✅ 【新增】用于图形界面的文件夹选择对话框（老五安装器专用）
+rfd = "0.10"
+
+
+# ==========================================
+# 构建配置
+# ==========================================
 [build-dependencies]
 winres = "0.1"
 
@@ -52,7 +61,8 @@ name = "LetRecoveryPE"
 path = "src/main.rs"
 
 [profile.release]
-opt-level = "z"
-lto = true
-codegen-units = 1
-strip = true
+# 极致压缩体积以适配 PE 环境
+opt-level = "z"     # optimize for size
+lto = true          # link-time optimization
+codegen-units = 1   # reduce number of codegen units to increase optimization
+strip = true        # strip symbols from binary files
