@@ -53,21 +53,24 @@ impl LaoWuApp {
         if v.len() > 100 { v.remove(0); }
     }
 
+    // 【重要修改】Slot-line 接受的是 &mut self，这比 &self 要安全
     fn start_install(&self) {
         let path = self.sys_path.clone();
         let drive = self.target_drive.clone();
         let logs = Arc::clone(&self.logs);
-        
+
         self.running = true;
-        self.add_log(">>> 正在启动老五一键重装...");
+        self.add_log(">>> 正在启动系统安装流程...");
 
         thread::spawn(move || {
+            // 检查文件存在性
             if !std::path::Path::new(&path).exists() {
                 logs.lock().unwrap().push("❌ 错误: 找不到镜像文件！".into());
                 return;
             }
-            logs.lock().unwrap().push(format!(">>> 锁定镜像: {}", path));
+            logs.lock().unwrap().push(format!(">>> 镜像已锁定: {}", path));
 
+            // 格式化
             logs.lock().unwrap().push(format!(">>> 正在格式化 {} 盘...", drive));
             if let Err(e) = core::disk::DiskManager::format_partition(&drive) {
                 logs.lock().unwrap().push(format!("❌ 格式化失败: {}", e));
@@ -75,6 +78,7 @@ impl LaoWuApp {
             }
             logs.lock().unwrap().push("✅ 格式化完成".into());
 
+            // 释放镜像
             logs.lock().unwrap().push(">>> 正在释放系统镜像...".into());
             let success = if path.ends_with(".gho") {
                 let ghost = core::ghost::Ghost::new();
@@ -91,22 +95,23 @@ impl LaoWuApp {
             };
 
             if !success {
-                logs.lock().unwrap().push("❌ 镜像释放失败".into());
+                logs.lock().unwrap().push("❌ 系统镜像释放失败".into());
                 return;
             }
-            logs.lock().unwrap().push("✅ 镜像释放完成".into());
+            logs.lock().unwrap().push("✅ 系统镜像释放完成".into());
 
-            logs.lock().unwrap().push(">>> 正在修复引导文件...".into());
+            // 引导修复
+            logs.lock().unwrap().push(">>> 正在修复引导配置...".into());
             let boot = core::bcdedit::BootManager::new();
             let uefi = core::disk::DiskManager::detect_uefi_mode();
             if let Err(e) = boot.repair_boot_advanced(&format!("{}:\\", drive), uefi) {
-                logs.lock().unwrap().push(format!("⚠️ 引导修复警告: {}", e));
+                logs.lock().unwrap().push(format!("⚠️ 引导配置修复警告: {}", e));
             } else {
                 logs.lock().unwrap().push("✅ 引导修复完成".into());
             }
 
             logs.lock().unwrap().push("================================".into());
-            logs.lock().unwrap().push("🎉 老五系统安装全部完成！".into());
+            logs.lock().unwrap().push("🎉 系统镜像安装流程完成！".into());
         });
     }
 }
@@ -135,25 +140,23 @@ impl eframe::App for LaoWuApp {
 
             ui.add_space(20.0);
             
-            // ✅ 修复按钮逻辑
             let btn_text = if self.running { "🔄 正在执行中..." } else { "🚀 立即一键重装" };
             let btn_color = if self.running { egui::Color32::GRAY } else { egui::Color32::GREEN };
 
             ui.centered_and_justified(|ui| {
-                // 更安全地设置按钮颜色（注释掉 akst 144 行的错误写法）
                 if ui.add_sized(
-                    ui.available_size_before_wrap(), 
-                    egui::Button::new(btn_text).fill(btn_color)
+                    ui.available_size_before_wrap(),
+                    egui::Button::new(btn_text).fill(btn_color),
                 ).clicked() && !self.running {
-                    
                     if self.sys_path.is_empty() {
                         self.add_log("⚠️ 请先选择系统镜像文件！");
                     } else {
+                        // 【修正】打个包装！确保是 &mut self，安全调用
                         self.start_install();
                     }
                 }
             });
-
+  
             ui.add_space(20.0);
             ui.separator();
             ui.label("📝 运行日志");
