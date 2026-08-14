@@ -7,6 +7,7 @@ mod utils;
 
 use eframe::egui;
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
 fn main() -> eframe::Result<()> {
@@ -31,9 +32,9 @@ fn main() -> eframe::Result<()> {
 
 struct LaoWuApp {
     sys_path: String,       // 镜像路径
-    target_drive: String,   // 目标磁盘
+    target_drive: String,   // 目标磁盘 (user can enter "C" or "C:")
     logs: Arc<Mutex<Vec<String>>>,
-    running: bool,
+    running: Arc<AtomicBool>, // allow background thread to clear this
 }
 
 impl LaoWuApp {
@@ -42,75 +43,110 @@ impl LaoWuApp {
             sys_path: "".to_string(),
             target_drive: "C:".to_string(),
             logs: Arc::new(Mutex::new(vec!["✅ 老五安装器已就绪！".to_string()])),
-            running: false,
+            running: Arc::new(AtomicBool::new(false)),
         }
     }
 
     fn add_log(&self, msg: &str) {
         println!("{}", msg);
-        let mut v = self.logs.lock().unwrap();
-        v.push(msg.to_string());
-        if v.len() > 100 { v.remove(0); }
+        if let Ok(mut v) = self.logs.lock() {
+            v.push(msg.to_string());
+            if v.len() > 100 { v.remove(0); }
+        }
     }
 
     fn start_install(&mut self) {
-        self.running = true;
+        // mark running
+        self.running.store(true, Ordering::SeqCst);
         self.add_log(">>> 正在启动无依赖安装流程...");
 
         let path = self.sys_path.clone();
         let drive = self.target_drive.clone();
         let logs = Arc::clone(&self.logs);
+        let running_flag = Arc::clone(&self.running);
 
         thread::spawn(move || {
+            // ensure running is cleared at the end
+            struct ClearOnDrop(Arc<AtomicBool>);
+            impl Drop for ClearOnDrop {
+                fn drop(&mut self) { self.0.store(false, Ordering::SeqCst); }
+            }
+            let _guard = ClearOnDrop(running_flag);
+
             if !std::path::Path::new(&path).exists() {
-                logs.lock().unwrap().push("❌ 镜像文件不存在，请确认选择!".into());
+                if let Ok(mut v) = logs.lock() {
+                    v.push("❌ 镜像文件不存在，请确认选择!".into());
+                }
                 return;
             }
 
-            logs.lock().unwrap().push(format!(">>> 镜像已锁定: {}", path));
-            logs.lock().unwrap().push(format!(">>> 正在格式化 {} 盘...", drive));
+            if let Ok(mut v) = logs.lock() {
+                v.push(format!(">>> 镜像已锁定: {}", path));
+                v.push(format!(">>> 正在格式化 {} 盘...", drive));
+            }
 
-            if let Err(e) = core::disk::DiskManager::format_partition(&drive) {
-                logs.lock().unwrap().push(format!("❌ 格式化失败: {}", e));
+            // normalize drive forms: letter ("C"), with_colon ("C:"), root ("C:\")
+            let drive_letter = drive.trim_end_matches(':').to_string();
+            let drive_with_colon = format!("{}:", drive_letter);
+            let drive_root = format!("{}:\\", drive_letter);
+
+            if let Err(e) = core::disk::DiskManager::format_partition(&drive_with_colon) {
+                if let Ok(mut v) = logs.lock() {
+                    v.push(format!("❌ 格式化失败: {}", e));
+                }
                 return;
             }
 
-            logs.lock().unwrap().push("✅ 格式化完成");
+            if let Ok(mut v) = logs.lock() {
+                v.push("✅ 格式化完成".into());
+                v.push(">>> 正在释放镜像...".into());
+            }
 
-            logs.lock().unwrap().push(">>> 正在释放镜像...".into());
             let success = if path.ends_with(".gho") {
                 let ghost = core::ghost::Ghost::new();
                 if ghost.is_available() {
                     let parts = core::disk::DiskManager::get_partitions().unwrap_or_default();
-                    ghost.restore_image_to_letter(&path, &format!("{}:\\", drive), &parts, None).is_ok()
+                    ghost.restore_image_to_letter(&path, &drive_root, &parts, None).is_ok()
                 } else {
-                    logs.lock().unwrap().push("⚠️ 警告: 未检测到 GHOST 工具，无法安装 GHO 格式镜像".into());
+                    if let Ok(mut v) = logs.lock() {
+                        v.push("⚠️ 警告: 未检测到 GHOST 工具，无法安装 GHO 格式镜像".into());
+                    }
                     false
                 }
             } else {
                 let dism = core::dism::Dism::new();
-                dism.apply_image(&path, &format!("{}:\\", drive), 0, None).is_ok()
+                dism.apply_image(&path, &drive_root, 0, None).is_ok()
             };
 
             if !success {
-                logs.lock().unwrap().push("❌ 系统镜像释放失败，请检查镜像文件!".into());
+                if let Ok(mut v) = logs.lock() {
+                    v.push("❌ 系统镜像释放失败，请检查镜像文件!".into());
+                }
                 return;
             }
 
-            logs.lock().unwrap().push("✅ 镜像释放成功");
+            if let Ok(mut v) = logs.lock() {
+                v.push("✅ 镜像释放成功".into());
+                v.push(">>> 正在修复引导配置...".into());
+            }
 
-            logs.lock().unwrap().push(">>> 正在修复引导配置...".into());
             let boot = core::bcdedit::BootManager::new();
             let use_uefi = core::disk::DiskManager::detect_uefi_mode();
 
-            if let Err(e) = boot.repair_boot_advanced(&format!("{}:\\", drive), use_uefi) {
-                logs.lock().unwrap().push(format!("⚠️ 引导配置修复警告: {}", e));
+            if let Err(e) = boot.repair_boot_advanced(&drive_root, use_uefi) {
+                if let Ok(mut v) = logs.lock() {
+                    v.push(format!("⚠️ 引导配置修复警告: {}", e));
+                }
             } else {
-                logs.lock().unwrap().push("✅ 引导修复完成！");
+                if let Ok(mut v) = logs.lock() {
+                    v.push("✅ 引导修复完成！".into());
+                }
             }
 
-            logs.lock().unwrap().push("=================================".into());
-            logs.lock().unwrap().push("🎉 系统镜像重装完成，可以安全重启了！".into());
+            if let Ok(mut v) = logs.lock() {
+                v.push("=================================".into());
+                v.push("🎉 系统镜像重装完成，可以安全重启了！".into());
+            }
         });
     }
 }
@@ -131,19 +167,20 @@ impl eframe::App for LaoWuApp {
             ui.text_edit_singleline(&mut self.sys_path);
 
             ui.separator();
-            ui.label("2. 选择安装目标磁盘（例如 C:）");
+            ui.label("2. 选择安装目标磁盘（例如 C 或 C:）");
             ui.text_edit_singleline(&mut self.target_drive);
 
             ui.add_space(20.0);
-            
-            let btn_text = if self.running { "🔄 正在释放中..." } else { "🚀 立即开始重装" };
-            let btn_color = if self.running { egui::Color32::GRAY } else { egui::Color32::GREEN };
+
+            let is_running = self.running.load(Ordering::SeqCst);
+            let btn_text = if is_running { "🔄 正在释放中..." } else { "🚀 立即开始重装" };
+            let btn_color = if is_running { egui::Color32::GRAY } else { egui::Color32::GREEN };
 
             ui.centered_and_justified(|ui| {
                 if ui.add_sized(
                     ui.available_size_before_wrap(),
                     egui::Button::new(btn_text).fill(btn_color),
-                ).clicked() && !self.running {
+                ).clicked() && !is_running {
 
                     if self.sys_path.is_empty() {
                         self.add_log("⚠️ 请先选好镜像文件！");
@@ -162,7 +199,7 @@ impl eframe::App for LaoWuApp {
             }
         });
 
-        if self.running {
+        if self.running.load(Ordering::SeqCst) {
             ctx.request_repaint();
         }
     }
