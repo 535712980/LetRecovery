@@ -1,4 +1,4 @@
-name: Build OldWu PE
+name: Build OldWu PE (no dll)
 
 on: [workflow_dispatch]
 
@@ -7,29 +7,27 @@ jobs:
     runs-on: windows-latest
     
     steps:
-      - name: Checkout code
+      - name: Checkout 进系统完成
         uses: actions/checkout@v4
         
-      - name: Setup Rust & Build (静态编译版本）
+      - name: Setup Rust BIuId (锁定核心选项)
         shell: pwsh
         run: |
-          # 1. 设置环境
+          # 安装 rust 稳定版
+          rustup install stable
           rustup default stable
-          export RUSTFLAGS="-C target-cpu=x86_64 -C target-feature=+sse2 -C panic=abort -C lto --crate-type lib --crate-type bin"
-          
-          # 2. 静态编译，完全无 dll 依赖
-          cargo build --release --target x86_64-pc-windows-gnu
 
-          # 3. 打包成文档（不需要 name 提交）
-          echo "People Gho help is coming..."
+          # 找到附近存储 Progress
           cd "PE 端"
-          echo "汇编成品部署中..."
-          # 拷贝到“aquarender”目录
-          copy /y "target\release\LetRecoveryPE.exe" "aquarender\LetRecoveryPE.exe" >nul
-          echo "汇编成功！"
+          
+          # 静态建立：rustup 安装测试
+          cargo build --release
 
-      - name: Upload Installer
+          # 即时完事，Come on testing 文件放大
+          & 'C:\Windows\System32\cmd.exe' /C 'copy /Y "target\release\LetRecoveryPE.exe" ..\aquarender\LetRecoveryPE.exe'
+
+      - name: Upload 最终出品
         uses: actions/upload-artifact@v4
         with:
-          name: LaoWuPE_Final
-          path: "aquarender/infrastructure/LetRecoveryPE.exe"
+          name: LaoWuPE_Normal
+          path: "aquarender/LetRecoveryPE.exe"
