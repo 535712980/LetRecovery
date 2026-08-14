@@ -1,4 +1,4 @@
-name: Build OldWu PE (no dll)
+name: Build OldWu PE
 
 on: [workflow_dispatch]
 
@@ -7,27 +7,22 @@ jobs:
     runs-on: windows-latest
     
     steps:
-      - name: Checkout 进系统完成
+      - name: Checkout code
         uses: actions/checkout@v4
         
-      - name: Setup Rust BIuId (锁定核心选项)
+      - name: Setup Rust & Build
         shell: pwsh
         run: |
-          # 安装 rust 稳定版
-          rustup install stable
-          rustup default stable
-
-          # 找到附近存储 Progress
-          cd "PE 端"
+          # 1. 自动找 Cargo.toml 在哪个文件夹
+          $projDir = (Get-ChildItem -Recurse -Filter "Cargo.toml" | Select-Object -First 1).DirectoryName
+          Write-Host "===> 找到项目目录: $projDir <==="
           
-          # 静态建立：rustup 安装测试
+          # 2. 进去编译
+          Set-Location $projDir
           cargo build --release
-
-          # 即时完事，Come on testing 文件放大
-          & 'C:\Windows\System32\cmd.exe' /C 'copy /Y "target\release\LetRecoveryPE.exe" ..\aquarender\LetRecoveryPE.exe'
-
-      - name: Upload 最终出品
+          
+      - name: Upload Installer
         uses: actions/upload-artifact@v4
         with:
-          name: LaoWuPE_Normal
-          path: "aquarender/LetRecoveryPE.exe"
+          name: LaoWuPE_Installer
+          path: '**/target/release/LetRecoveryPE.exe'
