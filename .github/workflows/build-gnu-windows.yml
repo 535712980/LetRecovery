@@ -1,0 +1,68 @@
+name: Build OldWu PE (GNU)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build_windows_gnu:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Cache cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            **/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Setup MSYS2 (install mingw-w64 gcc)
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >
+            mingw-w64-x86_64-gcc
+        # 后续用的是 msys2 提供的 bash 环境
+
+      - name: Install Rust GNU toolchain
+        shell: bash -lc
+        run: |
+          rustup toolchain install stable-x86_64-pc-windows-gnu --profile minimal
+          rustup target add x86_64-pc-windows-gnu
+
+      - name: Build with GNU toolchain (x86_64-pc-windows-gnu)
+        shell: bash -lc
+        run: |
+          # 找到第一个 Cargo.toml 的目录作为项目目录（和你之前的脚本逻辑一致）
+          proj=$(find . -name Cargo.toml -print -quit | xargs dirname)
+          echo "Project dir: $proj"
+          cd "$proj"
+          # 用 GNU toolchain 编译
+          cargo build --release --target x86_64-pc-windows-gnu
+
+      - name: Prepare artifact (exe + optional GLU)
+        shell: bash -lc
+        run: |
+          proj=$(find . -name Cargo.toml -print -quit | xargs dirname)
+          mkdir -p artifact
+          # 复制 exe（目标路径里可能含有目标三元组）
+          cp "$proj/target/x86_64-pc-windows-gnu/release/LetRecoveryPE.exe" artifact/ || (echo "ERROR: exe not found" && exit 1)
+          # 可选：把系统 GLU 库一并复制（有时候 WinPE 缺这个）
+          # 注意：这是把 runner 的 glu32.dll 复制到 artifact，确保位数匹配你的 WinPE（一般都是 x64）
+          cp /c/Windows/System32/glu32.dll artifact/ || echo "glu32.dll not found or copy failed; skipping"
+          ls -la artifact
+
+      - name: Upload Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: LaoWuPE_Installer_gnu
+          path: artifact/**
+          retention-days: 7
